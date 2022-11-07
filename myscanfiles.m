@@ -10,41 +10,32 @@
 %     drawnow
 % end
 
-im = imread('car1.jpg');
+im = imread('./car1.jpg');
+imorig = im;
 imgray = rgb2gray(im);
-imbin = imbinarize(imgray);
-imshow(imbin)
 
-im = edge(imgray, 'prewitt');
+window_size = 31;
+h = ones(window_size)/window_size^2;
+promig = imfilter(imgray, h, 'conv', 'replicate');
+%figure, imshow(promig), title('imatge promig');
+imbw = imgray > (promig - 5);
+%figure, imshow(imbw), title('Moving averages');
 
-Iprops=regionprops(im,'BoundingBox','Area', 'Image');
-area = Iprops.Area;
+% imbin = imbinarize(imgray);
+Iprops = regionprops(imbw,'BoundingBox','Area', 'Image');
 count = numel(Iprops);
-maxa= area;
-boundingBox = Iprops.BoundingBox;
+
 for i=1:count
-   if maxa<Iprops(i).Area
-      maxa=Iprops(i).Area;
-      boundingBox=Iprops(i).BoundingBox;
-   end
-end   
-% 
-% im = imcrop(imbin, boundingBox);
-% im = bwareaopen(~im, 500);
-% [h, w] = size(im);
-% 
-% imshow(im);
-% 
-% Iprops=regionprops(im,'BoundingBox','Area', 'Image');
-% count = numel(Iprops);
-% noPlate=[];
-% for i=1:count
-%    ow = length(Iprops(i).Image(1,:));
-%    oh = length(Iprops(i).Image(:,1));
-%    if ow<(h/2) & oh>(h/3)
-%        letter=Letter_detection(Iprops(i).Image);
-%        noPlate=[noPlate letter]
-%    end
-% end
-% 
-% 
+    h = Iprops(i).BoundingBox(4);
+    w = Iprops(i).BoundingBox(3);
+    whitePixels = Iprops(i).Image == 1; 
+    whites = sum(Iprops(i).Image(whitePixels));
+    npixels = numel(Iprops(i).Image);
+    if Iprops(i).Area > 1000 && Iprops(i).Area < 5000 && w > 2*h && whites > npixels*0.5
+         figure, imshow(imorig)
+         hold on;
+         rectangle('Position', Iprops(i).BoundingBox, 'EdgeColor', 'g')
+         hold off;
+         %figure, imshow(Iprops(i).Image)
+    end
+end
