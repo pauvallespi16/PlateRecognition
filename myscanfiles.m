@@ -1,29 +1,15 @@
-% close all
-% a = dir('./day_color(small sample)/*.jpg');
-% nf = size(a);
-% 
-% figure
-% for i = 1:nf 
-%     filename = horzcat(a(i).folder,'/',a(i).name);
-%     I = imread(filename);
-%     imshow(I);
-%     drawnow
-% end
-
-im = imread('./car1.jpg');
+im = imread('./day_color(small sample)/IMG_0414.jpg');
 imorig = im;
 imgray = rgb2gray(im);
 
 window_size = 31;
 h = ones(window_size)/window_size^2;
 promig = imfilter(imgray, h, 'conv', 'replicate');
-%figure, imshow(promig), title('imatge promig');
 imbw = imgray > (promig - 5);
-%figure, imshow(imbw), title('Moving averages');
 
-% imbin = imbinarize(imgray);
 Iprops = regionprops(imbw,'BoundingBox','Area', 'Image');
 count = numel(Iprops);
+subImages = {};
 
 for i=1:count
     h = Iprops(i).BoundingBox(4);
@@ -31,11 +17,40 @@ for i=1:count
     whitePixels = Iprops(i).Image == 1; 
     whites = sum(Iprops(i).Image(whitePixels));
     npixels = numel(Iprops(i).Image);
-    if Iprops(i).Area > 1000 && Iprops(i).Area < 5000 && w > 2*h && whites > npixels*0.5
+    if Iprops(i).Area > 500 && Iprops(i).Area < 10000 && w > 2*h && whites > npixels*0.5
          figure, imshow(imorig)
          hold on;
          rectangle('Position', Iprops(i).BoundingBox, 'EdgeColor', 'g')
+         subImages{numel(subImages)+1} = imcrop(imorig, Iprops(i).BoundingBox);
          hold off;
-         %figure, imshow(Iprops(i).Image)
     end
 end
+
+%%
+numsMatricula = 7;
+digits = {};
+for i=1:numel(subImages)
+    ee = strel('square', 1);
+    matricula = ~imbinarize(rgb2gray(subImages{i}));
+    matricula = imopen(matricula, ee);
+    Iprops = regionprops(matricula, 'BoundingBox','Area', 'Image');
+    if numel(Iprops) < numsMatricula 
+        continue
+    end
+    matriculaOriginal = subImages{i};
+    for j=1:numel(Iprops)
+        h = Iprops(j).BoundingBox(4);
+        w = Iprops(j).BoundingBox(3);
+          
+        if Iprops(j).Area > 50 && Iprops(j).Area < 2000 && w < h
+             digits{numel(digits)+1} = Iprops(j).BoundingBox;
+        end
+    end
+end
+
+figure, imshow(matriculaOriginal);
+hold on
+for i=1:numel(digits)
+    rectangle('Position', digits{i}, 'EdgeColor', 'r')
+end
+hold off
