@@ -1,18 +1,18 @@
 %% Read image and convert it to black and white
-im = imread('./day_color(small sample)/IMG_0385.jpg');
+im = imread("car1.jpg");
 imbw = movingAverages(im);
 
 %% Get plates from image
 plates = getPlates(im, imbw);
 
 %% Get digits from image
-numsPlate = 7;
-digits = getDigits(plates, numsPlate);
+digitsPlate = 7;
+digits = getDigits(plates, digitsPlate);
 
 %% Functions
 % Function to binarize image 
 function imbw = movingAverages(im)
-    window_size = 31;
+    window_size = 5;
     imgray = rgb2gray(im);
     h = ones(window_size)/window_size^2;
     promig = imfilter(imgray, h, 'conv', 'replicate');
@@ -32,7 +32,7 @@ function subImages = getPlates(im, imbw)
         whitePixels = Iprops(i).Image == 1; 
         whites = sum(Iprops(i).Image(whitePixels));
         npixels = numel(Iprops(i).Image);
-        if Iprops(i).Area > area*0.0001 && Iprops(i).Area < area*0.02 && w > 2*h && whites > npixels*0.5
+        if Iprops(i).Area > area*0.001 && Iprops(i).Area < area*0.02 && w > 2*h && whites > npixels*0.5
              figure, imshow(im)
              hold on;
              rectangle('Position', Iprops(i).BoundingBox, 'EdgeColor', 'g', 'LineWidth', 2)
@@ -43,20 +43,19 @@ function subImages = getPlates(im, imbw)
 end
 
 % Function to get digits from plates
-function digits = getDigits(plates, numsPlate)
+function digits = getDigits(plates, digitsPlate)
     digits = {};
     numImages = numel(plates);
-    matriculaOriginal = {};
     for i=1:numImages
         ee = strel('square', 1);
         matricula = ~imbinarize(rgb2gray(plates{i}));
         matricula = imopen(matricula, ee);
         [h, w] = size(matricula);
         Iprops = regionprops(matricula, 'BoundingBox','Area', 'Image');
-        if numel(Iprops) < numsPlate 
+        if numel(Iprops) < digitsPlate 
             continue
         end
-        matriculaOriginal = plates{i};
+        
         numElems = numel(Iprops);
 
         mean_width = 0;
@@ -83,7 +82,6 @@ function digits = getDigits(plates, numsPlate)
 
         mean_width = mean_width / numel(digits);
         mean_height = mean_height / numel(digits);
-        % mean_y = mean_y / numel(digits);
 
         % Check if we can fit a Bounding Box at the end
         if numel(digits) < numsPlate && numel(digits) >= numsPlate-1
