@@ -1,5 +1,5 @@
 %% Read image and convert it to black and white
-im = imread("day_color(small sample)/IMG_0385.jpg");
+im = imread("day_color(small sample)/DSCN0408.jpg");
 window_size = 7;
 imbw = movingAverages(im, window_size);
 
@@ -87,6 +87,10 @@ function digits = getDigits(plates, digitsPlate)
         if numel(digits) < digitsPlate && numel(digits) >= digitsPlate-1
             new_y = (digits{1, numel(digits)}(2) - digits{1, numel(digits)-1}(2)) + digits{1, numel(digits)}(2);
             new_bb = [digits{1, numel(digits)}(1)+mean_width*1.25, new_y, mean_width, mean_height];
+            overlapRatio = bboxOverlapRatio(new_bb, digits{1, numel(digits)});
+            if overlapRatio == 0
+                digits{numel(digits)+1} = new_bb;
+            end
         end
 
         figure, imshow(matricula);
