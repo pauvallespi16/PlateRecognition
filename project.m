@@ -10,6 +10,8 @@ plates = getPlates(im, imbw);
 digitsPlate = 7;
 digits = getDigits(plates, digitsPlate);
 
+%% OCR
+
 %% Functions
 % Function to binarize image 
 function imbw = movingAverages(im, window_size)
@@ -95,8 +97,8 @@ function digits = getDigits(plates, digitsPlate)
 
         figure, imshow(matricula);
         hold on
-        for i=1:numel(digits)
-            rectangle('Position', digits{i}, 'EdgeColor', 'r', 'LineWidth', 2)
+        for k=1:numel(digits)
+            rectangle('Position', digits{k}, 'EdgeColor', 'r', 'LineWidth', 2)
         end
         hold off
     end
