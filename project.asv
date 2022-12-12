@@ -103,7 +103,7 @@ function digits = getDigits(plates, digitsPlate)
             new_y = (digits{1, numel(digits)}(2) - digits{1, numel(digits)-1}(2)) + digits{1, numel(digits)}(2);
             new_bb = [new_x, new_y, mean_width, mean_height];
             overlapRatio = bboxOverlapRatio(new_bb, digits{1, numel(digits)});
-            if overlapRatio == 0 && new_x + mean_width < w && new_y + mean
+            if overlapRatio == 0 && new_x + mean
                 digits{numel(digits)+1} = new_bb;
             end
         end

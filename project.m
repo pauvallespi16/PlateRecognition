@@ -1,5 +1,5 @@
 %% Read image and convert it to black and white
-im = imread("day_color(small sample)/IMG_0478.jpg");
+im = imread("day_color(small sample)/IMG_0379.jpg");
 window_size = 7;
 imbw = movingAverages(im, window_size);
 
@@ -99,12 +99,14 @@ function digits = getDigits(plates, digitsPlate)
 
         % Check if we can fit a Bounding Box at the end
         if numel(digits) < digitsPlate && numel(digits) >= digitsPlate-1
-            new_x = digits{1, numel(digits)}(1)+mean_width*1.25;
             new_y = (digits{1, numel(digits)}(2) - digits{1, numel(digits)-1}(2)) + digits{1, numel(digits)}(2);
-            new_bb = [new_x, new_y, mean_width, mean_height];
-            overlapRatio = bboxOverlapRatio(new_bb, digits{1, numel(digits)});
-            if overlapRatio == 0
-                digits{numel(digits)+1} = new_bb;
+            new_x = digits{1, numel(digits)}(1)+mean_width*1.25;
+            if new_x + mean_width > 0  && new_x + mean_width < w && new_y + mean_height > 0 &&  new_y + mean_height < h
+                new_bb = [new_x, new_y, mean_width, mean_height];
+                overlapRatio = bboxOverlapRatio(new_bb, digits{1, numel(digits)});
+                if overlapRatio == 0
+                    digits{numel(digits)+1} = new_bb;
+                end
             end
         end
 
