@@ -1,5 +1,5 @@
 %% Read image and convert it to black and white
-im = imread("day_color(small sample)/DSCN0408.jpg");
+im = imread("day_color(small sample)/IMG_0478.jpg");
 window_size = 7;
 imbw = movingAverages(im, window_size);
 
@@ -7,7 +7,7 @@ imbw = movingAverages(im, window_size);
 plates = getPlates(im, imbw);
 
 %% Get digits from image
-digitsPlate = 7;
+digitsPlate = 6;
 digits = getDigits(plates, digitsPlate);
 
 %% OCR
@@ -23,24 +23,30 @@ end
 
 % Function to get plates from image
 function subImages = getPlates(im, imbw)
+    it = 0;
     subImages = {};
-    Iprops = regionprops(imbw,'BoundingBox','Area', 'Image');
-    numElems = numel(Iprops);
-    [rows, cols] = size(im);
-    area = rows*cols;
-    for i=1:numElems
-        h = Iprops(i).BoundingBox(4);
-        w = Iprops(i).BoundingBox(3);
-        whitePixels = Iprops(i).Image == 1; 
-        whites = sum(Iprops(i).Image(whitePixels));
-        npixels = numel(Iprops(i).Image);
-        if Iprops(i).Area > area*0.001 && Iprops(i).Area < area*0.02 && w > 2*h && whites > npixels*0.4
-             figure, imshow(im)
-             hold on;
-             rectangle('Position', Iprops(i).BoundingBox, 'EdgeColor', 'g', 'LineWidth', 2)
-             subImages{numel(subImages)+1} = imcrop(im, Iprops(i).BoundingBox);
-             hold off;
+    imbw = imerode(imbw, strel('disk', 1));
+    while numel(subImages) == 0 && it < 2
+        Iprops = regionprops(imbw,'BoundingBox','Area', 'Image');
+        numElems = numel(Iprops);
+        [rows, cols] = size(im);
+        area = rows*cols;
+        for i=1:numElems
+            h = Iprops(i).BoundingBox(4);
+            w = Iprops(i).BoundingBox(3);
+            whitePixels = Iprops(i).Image == 1; 
+            whites = sum(Iprops(i).Image(whitePixels));
+            npixels = numel(Iprops(i).Image);
+            if Iprops(i).Area > area*0.0005 && Iprops(i).Area < area*0.02 && w > 2*h && w < 8*h && whites > npixels*0.25
+                 figure, imshow(im)
+                 hold on;
+                 rectangle('Position', Iprops(i).BoundingBox, 'EdgeColor', 'g', 'LineWidth', 2)
+                 subImages{numel(subImages)+1} = imcrop(im, Iprops(i).BoundingBox);
+                 hold off;
+            end
         end
+        imbw = imerode(imbw, strel('disk', 1));
+        it = it+1;
     end
 end
 
@@ -54,19 +60,25 @@ function digits = getDigits(plates, digitsPlate)
         matricula = imopen(matricula, ee);
         [h, w] = size(matricula);
         Iprops = regionprops(matricula, 'BoundingBox','Area', 'Image');
-        if numel(Iprops) < digitsPlate 
+        numElems = numel(Iprops);
+        if numElems < digitsPlate 
             continue
         end
-
-        numElems = numel(Iprops);
 
         mean_width = 0;
         mean_height = 0;
         mean_gap = 0;
 
         for j=1:numElems
+
             h_bb = Iprops(j).BoundingBox(4);
             w_bb = Iprops(j).BoundingBox(3);
+            x_bb = Iprops(j).BoundingBox(1);
+            y_bb = Iprops(j).BoundingBox(2);
+
+            if x_bb <= 1 || x_bb+w_bb >= w || y_bb <= 1 || y_bb+h_bb >= h
+                continue
+            end
 
             min_widht = w*0.01;
             max_widht = w*(1/7);
@@ -77,7 +89,7 @@ function digits = getDigits(plates, digitsPlate)
                 mean_width = mean_width + w_bb;
                 mean_height = mean_height + h_bb;
                 mean_gap = mean_gap + Iprops(1).BoundingBox(2);
-
+                
                 digits{numel(digits)+1} = Iprops(j).BoundingBox;
             end
         end
@@ -87,8 +99,9 @@ function digits = getDigits(plates, digitsPlate)
 
         % Check if we can fit a Bounding Box at the end
         if numel(digits) < digitsPlate && numel(digits) >= digitsPlate-1
+            new_x = digits{1, numel(digits)}(1)+mean_width*1.25;
             new_y = (digits{1, numel(digits)}(2) - digits{1, numel(digits)-1}(2)) + digits{1, numel(digits)}(2);
-            new_bb = [digits{1, numel(digits)}(1)+mean_width*1.25, new_y, mean_width, mean_height];
+            new_bb = [new_x, new_y, mean_width, mean_height];
             overlapRatio = bboxOverlapRatio(new_bb, digits{1, numel(digits)});
             if overlapRatio == 0
                 digits{numel(digits)+1} = new_bb;
