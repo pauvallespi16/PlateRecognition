@@ -1,7 +1,27 @@
 %% Read image and convert it to black and white
-im = imread("day_color(small sample)/IMG_0379.jpg");
 window_size = 7;
-imbw = movingAverages(im, window_size);
+% im = imread("day_color(small sample)/IMG_0383.jpg");
+% imbw = movingAverages(im, window_size);
+
+imagefiles = dir('*.jpg');     
+nfiles = length(imagefiles);
+for ii=1:nfiles
+   currentfilename = imagefiles(ii).name;
+   currentimage = imread(currentfilename);
+   images{ii} = currentimage;
+   images_bw{ii} = movingAverages(images{ii}, window_size);
+end
+
+%% Loop
+digitsPlate = 6;
+for i=1:nfiles
+    im = images{i};
+    imbw = images_bw{i};
+    plates = getPlates(im, imbw);
+    digits = getDigits(plates, digitsPlate);
+    pause(5);
+    close all;
+end
 
 %% Get plates from image
 plates = getPlates(im, imbw);
@@ -11,6 +31,7 @@ digitsPlate = 6;
 digits = getDigits(plates, digitsPlate);
 
 %% OCR
+
 
 %% Functions
 % Function to binarize image 
@@ -53,11 +74,12 @@ end
 % Function to get digits from plates
 function digits = getDigits(plates, digitsPlate)
     digits = {};
+    ee = strel('line', 2, 90);
     numImages = numel(plates);
     for i=1:numImages
-        ee = strel('square', 1);
         matricula = ~imbinarize(rgb2gray(plates{i}));
-        matricula = imopen(matricula, ee);
+        original_matricula = matricula;
+        matricula = imerode(matricula, ee);
         [h, w] = size(matricula);
         Iprops = regionprops(matricula, 'BoundingBox','Area', 'Image');
         numElems = numel(Iprops);
@@ -88,8 +110,6 @@ function digits = getDigits(plates, digitsPlate)
             if h_bb <= max_height && h_bb >= min_height && w_bb <= max_widht && w_bb >= min_widht
                 mean_width = mean_width + w_bb;
                 mean_height = mean_height + h_bb;
-                mean_gap = mean_gap + Iprops(1).BoundingBox(2);
-                
                 digits{numel(digits)+1} = Iprops(j).BoundingBox;
             end
         end
@@ -99,8 +119,8 @@ function digits = getDigits(plates, digitsPlate)
 
         % Check if we can fit a Bounding Box at the end
         if numel(digits) < digitsPlate && numel(digits) >= digitsPlate-1
+            new_x = digits{1, numel(digits)}(1) + digits{1, numel(digits)}(3)*1.3;
             new_y = (digits{1, numel(digits)}(2) - digits{1, numel(digits)-1}(2)) + digits{1, numel(digits)}(2);
-            new_x = digits{1, numel(digits)}(1)+mean_width*1.25;
             if new_x + mean_width > 0  && new_x + mean_width < w && new_y + mean_height > 0 &&  new_y + mean_height < h
                 new_bb = [new_x, new_y, mean_width, mean_height];
                 overlapRatio = bboxOverlapRatio(new_bb, digits{1, numel(digits)});
@@ -110,7 +130,7 @@ function digits = getDigits(plates, digitsPlate)
             end
         end
 
-        figure, imshow(matricula);
+        figure, imshow(original_matricula);
         hold on
         for k=1:numel(digits)
             rectangle('Position', digits{k}, 'EdgeColor', 'r', 'LineWidth', 2)
