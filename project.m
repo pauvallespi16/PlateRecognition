@@ -83,8 +83,7 @@ function digits = getDigits(plates, digitsPlate)
         matricula = ~imbinarize(rgb2gray(plates{i}));
         original_matricula = matricula;
         matricula = imerode(matricula, ee);
-        it = 0;
-        while it < 2
+        for it=1:3
             Iprops = regionprops(matricula, 'BoundingBox','Area', 'Image');
             numElems = numel(Iprops);
             if numElems < digitsPlate 
@@ -157,7 +156,6 @@ function digits = getDigits(plates, digitsPlate)
             matricula(:, max_x:w) = 0;
     
             figure, imshow(matricula);
-            it = it + 1;
         end
 
         % Print digits
