@@ -1,29 +1,7 @@
 %% Read image and convert it to black and white
 window_size = 7;
-im = imread("day_color(small sample)/IMG_0482.jpg");
+im = imread("day_color(small sample)/DSCN0418.jpg");
 imbw = movingAverages(im, window_size);
-
-%% Read multiple images
-imagefiles = dir('*.jpg');     
-nfiles = length(imagefiles);
-for ii=1:nfiles
-   currentfilename = imagefiles(ii).name;
-   currentimage = imread(currentfilename);
-   images{ii} = currentimage;
-   images_bw{ii} = movingAverages(images{ii}, window_size);
-end
-
-%% Loop
-digitsPlate = 6;
-for i=1:nfiles
-    im = images{i};
-    imbw = images_bw{i};
-    plates = getPlates(im, imbw);
-    digits = getDigits(plates, digitsPlate);
-    w = waitforbuttonpress;
-    axes;    
-    close all;
-end
 
 %% Get plates from image
 plates = getPlates(im, imbw);
@@ -79,10 +57,8 @@ function real_digits = getDigits(plates, digitsPlate)
     ee = strel('line', 1, 90);
     numImages = numel(plates);
     for i=1:numImages
-
         % Binarize image
         matricula = ~imbinarize(rgb2gray(plates{i}));
-        original_matricula = matricula;
         matricula = imerode(matricula, ee);
 
         for it=1:3
@@ -138,45 +114,22 @@ function real_digits = getDigits(plates, digitsPlate)
                     end
                 end
             end
-            numel(digits)
+
             if numel(digits) >= 4
-            
-                % Remove overlaping digits
-                digits = removeOverlaping(digits);
-    
                 mean_width = mean_width / numel(digits);
                 mean_height = mean_height / numel(digits);
 
                 % Check if we can fit a Bounding Box at the end
                 digits = lastDigitsFits(digits, w, h, mean_width, mean_height, digitsPlate);
         
-                max_x = 1;
-                max_y = 1;
-                min_x = w;
-                min_y = h;
-
-                first_y = 0;
-                last_y = 0;
-        
-                for j=1:numel(digits)
-                    if digits{1, j}(1) + digits{1, j}(3) > max_x
-                        last_y = digits{1, j}(2);
-                    end
-                    if digits{1, j}(1) < min_x
-                        first_y = digits{1, j}(2);
-                    end
-
-                    max_x = uint8(max(digits{1, j}(1) + digits{1, j}(3), max_x));
-                    max_y = uint8(max(digits{1, j}(2) + digits{1, j}(4), max_y));
-                    min_x = uint8(min(digits{1, j}(1), min_x));
-                    min_y = uint8(min(digits{1, j}(2), min_y));
-                end
-
-                %printDigits(digits, matricula);
+                [max_x, max_y, min_x, min_y, first_y, last_y] = findMinMax(digits, w, h);
                 real_digits = digits;
         
+                % Remove the edges of the plate
                 matricula(1:min_y-1, :) = 0;
                 matricula(max_y+1:h, :) = 0;
+
+                % Rotate the plate
                 if it > 1
                     if min_x > 1
                         matricula(:, 1:min_x-1) = 0;
@@ -189,22 +142,40 @@ function real_digits = getDigits(plates, digitsPlate)
                     angle = rad2deg(atan2(double(last_y - first_y), double(max_x - min_x)));
                     matricula = imrotate(matricula, angle);
                 end
-
-                % Create an affine transformation that rotates the image by the desired angle
-                % tform = affine2d([cosd(angle) -sind(angle) 0; sind(angle) cosd(angle) 0; 0 0 1]);
-
-%                 for k = 1:numel(digits)
-%                     digits{1, k}(1:2) = transformPointsForward(tform, digits{1, k}(1:2));
-%                 end
-            end
-    
-            % figure, imshow(matricula);
+            end    
         end
+
+        % Remove overlaping digits
+        real_digits = removeOverlaping(real_digits);
 
         % Print digits
         if numel(real_digits) >= 4
             printDigits(real_digits, matricula)
         end
+    end
+end
+
+function [max_x, max_y, min_x, min_y, first_y, last_y] = findMinMax(digits, w, h)
+    max_x = 1;
+    max_y = 1;
+    min_x = w;
+    min_y = h;
+
+    first_y = 0;
+    last_y = 0;
+
+    for j=1:numel(digits)
+        if digits{1, j}(1) + digits{1, j}(3) > max_x
+            last_y = digits{1, j}(2);
+        end
+        if digits{1, j}(1) < min_x
+            first_y = digits{1, j}(2);
+        end
+
+        max_x = uint8(max(digits{1, j}(1) + digits{1, j}(3), max_x));
+        max_y = uint8(max(digits{1, j}(2) + digits{1, j}(4), max_y));
+        min_x = uint8(min(digits{1, j}(1), min_x));
+        min_y = uint8(min(digits{1, j}(2), min_y));
     end
 end
 
@@ -271,4 +242,27 @@ function printDigits(digits, matricula)
         rectangle('Position', digits{k}, 'EdgeColor', 'r', 'LineWidth', 2)
     end
     hold off
+end
+
+% Function to automate process
+function automatedProcess()
+    imagefiles = dir('*.jpg');     
+    nfiles = length(imagefiles);
+    for ii=1:nfiles
+       currentfilename = imagefiles(ii).name;
+       currentimage = imread(currentfilename);
+       images{ii} = currentimage;
+       images_bw{ii} = movingAverages(images{ii}, window_size);
+    end
+    
+    digitsPlate = 6;
+    for i=1:nfiles
+        im = images{i};
+        imbw = images_bw{i};
+        plates = getPlates(im, imbw);
+        digits = getDigits(plates, digitsPlate);
+        w = waitforbuttonpress;
+        axes;    
+        close all;
+    end
 end
