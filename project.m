@@ -1,6 +1,6 @@
 %% Read image and convert it to black and white
 window_size = 7;
-im = imread("day_color(small sample)/IMG_0388.jpg");
+im = imread("day_color(small sample)/IMG_0482.jpg");
 imbw = movingAverages(im, window_size);
 
 %% Read multiple images
@@ -74,16 +74,20 @@ function subImages = getPlates(im, imbw)
 end
 
 % Function to get digits from plates
-function digits = getDigits(plates, digitsPlate)
-    digits = {};
+function real_digits = getDigits(plates, digitsPlate)
+    real_digits = {};
     ee = strel('line', 1, 90);
     numImages = numel(plates);
     for i=1:numImages
+
         % Binarize image
         matricula = ~imbinarize(rgb2gray(plates{i}));
         original_matricula = matricula;
         matricula = imerode(matricula, ee);
+
         for it=1:3
+            digits = {};
+            
             Iprops = regionprops(matricula, 'BoundingBox','Area', 'Image');
             numElems = numel(Iprops);
             if numElems < digitsPlate 
@@ -93,12 +97,14 @@ function digits = getDigits(plates, digitsPlate)
             mean_width = 0;
             mean_height = 0;
             [h, w] = size(matricula);
+            h = uint8(h);
+            w = uint8(w);
     
             for j=1:numElems
-                h_bb = Iprops(j).BoundingBox(4);
-                w_bb = Iprops(j).BoundingBox(3);
                 x_bb = Iprops(j).BoundingBox(1);
                 y_bb = Iprops(j).BoundingBox(2);
+                w_bb = Iprops(j).BoundingBox(3);
+                h_bb = Iprops(j).BoundingBox(4);
     
                 % Check if digit is out of bounds
                 if x_bb <= 1 || x_bb+w_bb >= w || y_bb <= 1 || y_bb+h_bb >= h
@@ -111,55 +117,94 @@ function digits = getDigits(plates, digitsPlate)
                 max_height = h;
     
                 % Check if size is valid
-                if h_bb >= min_height && w_bb >= min_width
-                    mean_width = mean_width + w_bb;
-                    mean_height = mean_height + h_bb;
-                    if h_bb <= max_height && w_bb <= max_width
+                if h_bb >= min_height && w_bb >= min_width && h_bb <= max_height
+                    if w_bb <= max_width
                         digits{numel(digits)+1} = Iprops(j).BoundingBox;
-                     else
-                         w_bb = 0.9*w_bb/2;
-                         bbox1 = Iprops(j).BoundingBox;
-                         bbox1(3) = w_bb;
-     
-                         bbox2 = Iprops(j).BoundingBox;
-                         bbox2(1) = bbox1(1)+w_bb*1.2;
-                         bbox2(3) = w_bb;
-                         digits{numel(digits)+1} = bbox1;
-                         digits{numel(digits)+1} = bbox2;
-                     end
+                        mean_width = mean_width + w_bb;
+                        mean_height = mean_height + h_bb;
+                    elseif w_bb < max_width*2.5
+                        w_bb = 0.9*w_bb/2;
+                        bbox1 = Iprops(j).BoundingBox;
+                        bbox1(3) = w_bb;
+                        
+                        bbox2 = Iprops(j).BoundingBox;
+                        bbox2(1) = bbox1(1)+w_bb*1.2;
+                        bbox2(3) = w_bb;
+                        digits{numel(digits)+1} = bbox1;
+                        digits{numel(digits)+1} = bbox2;
+
+                        mean_width = mean_width + w_bb;
+                        mean_height = mean_height + Iprops(j).BoundingBox(2);
+                    end
                 end
             end
+            numel(digits)
+            if numel(digits) >= 4
+            
+                % Remove overlaping digits
+                digits = removeOverlaping(digits);
     
-            % Remove overlaping digits
-            digits = removeOverlaping(digits);
-    
-            % Check if we can fit a Bounding Box at the end
-            mean_width = mean_width / numel(digits);
-            mean_height = mean_height / numel(digits);
-            digits = lastDigitsFits(digits, w, h, mean_width, mean_height, digitsPlate);
-    
-            max_x = 0;
-            max_y = 0;
-            min_x = w;
-            min_y = h;
-    
-            for j=1:numel(digits)
-                max_x = max(digits{1, j}(1), max_x + digits{1, j}(3));
-                max_y = max(digits{1, j}(2), max_y + digits{1, j}(4));
-                min_x = min(digits{1, j}(1), min_x);
-                min_y = min(digits{1, j}(2), min_y);
+                mean_width = mean_width / numel(digits);
+                mean_height = mean_height / numel(digits);
+
+                % Check if we can fit a Bounding Box at the end
+                digits = lastDigitsFits(digits, w, h, mean_width, mean_height, digitsPlate);
+        
+                max_x = 1;
+                max_y = 1;
+                min_x = w;
+                min_y = h;
+
+                first_y = 0;
+                last_y = 0;
+        
+                for j=1:numel(digits)
+                    if digits{1, j}(1) + digits{1, j}(3) > max_x
+                        last_y = digits{1, j}(2);
+                    end
+                    if digits{1, j}(1) < min_x
+                        first_y = digits{1, j}(2);
+                    end
+
+                    max_x = uint8(max(digits{1, j}(1) + digits{1, j}(3), max_x));
+                    max_y = uint8(max(digits{1, j}(2) + digits{1, j}(4), max_y));
+                    min_x = uint8(min(digits{1, j}(1), min_x));
+                    min_y = uint8(min(digits{1, j}(2), min_y));
+                end
+
+                %printDigits(digits, matricula);
+                real_digits = digits;
+        
+                matricula(1:min_y-1, :) = 0;
+                matricula(max_y+1:h, :) = 0;
+                if it > 1
+                    if min_x > 1
+                        matricula(:, 1:min_x-1) = 0;
+                    end
+                    if max_x < w
+                        matricula(:, max_x+1:w) = 0;
+                    end
+                else
+                    % Use atan2 to get the angle between the two points
+                    angle = rad2deg(atan2(double(last_y - first_y), double(max_x - min_x)));
+                    matricula = imrotate(matricula, angle);
+                end
+
+                % Create an affine transformation that rotates the image by the desired angle
+                % tform = affine2d([cosd(angle) -sind(angle) 0; sind(angle) cosd(angle) 0; 0 0 1]);
+
+%                 for k = 1:numel(digits)
+%                     digits{1, k}(1:2) = transformPointsForward(tform, digits{1, k}(1:2));
+%                 end
             end
     
-            matricula(1:min_y, :) = 0;
-            matricula(max_y:h, :) = 0;
-            matricula(:, 1:min_x) = 0;
-            matricula(:, max_x:w) = 0;
-    
-            figure, imshow(matricula);
+            % figure, imshow(matricula);
         end
 
         % Print digits
-        printDigits(digits, original_matricula)
+        if numel(real_digits) >= 4
+            printDigits(real_digits, matricula)
+        end
     end
 end
 
