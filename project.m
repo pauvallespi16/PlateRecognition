@@ -1,6 +1,6 @@
 %% Read image and convert it to black and white
 window_size = 7;
-im = imread("day_color(small sample)/IMG_0469.jpg");
+im = imread("day_color(small sample)/IMG_0472.jpg");
 imbw = movingAverages(im, window_size);
 
 %% Get plates from image
