@@ -1,6 +1,6 @@
 %% Read image and convert it to black and white
 window_size = 7;
-im = imread("day_color(small sample)/DSCN0418.jpg");
+im = imread("day_color(small sample)/IMG_0469.jpg");
 imbw = movingAverages(im, window_size);
 
 %% Get plates from image
@@ -38,6 +38,9 @@ function subImages = getPlates(im, imbw)
             whitePixels = Iprops(i).Image == 1; 
             whites = sum(Iprops(i).Image(whitePixels));
             npixels = numel(Iprops(i).Image);
+            
+            % If plate fulfills conditions: big and small enough, wide
+            % enough and an amount of white pixels big enough
             if Iprops(i).Area > area*0.0005 && Iprops(i).Area < area*0.02 && w > 2*h && w < 8*h && whites > npixels*0.25
                  figure, imshow(im)
                  hold on;
@@ -151,7 +154,7 @@ function real_digits = getDigits(plates, digitsPlate)
         real_digits = removeOverlaping(real_digits);
 
         % Print digits
-        if numel(real_digits) >= 4
+        if numel(digits) >= 4
             printDigits(real_digits, matricula)
         end
     end
