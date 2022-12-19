@@ -98,6 +98,8 @@ function real_digits = getDigits(plates, digitsPlate)
                         digits{numel(digits)+1} = Iprops(j).BoundingBox;
                         mean_width = mean_width + w_bb;
                         mean_height = mean_height + h_bb;
+                    % If the height is correct and the width is too big, it
+                    % can be that there are 2 numbers stacked together
                     elseif w_bb < max_width*2.5
                         w_bb = 0.9*w_bb/2;
                         bbox1 = Iprops(j).BoundingBox;
