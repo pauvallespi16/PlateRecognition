@@ -1,6 +1,6 @@
 %% Read image and convert it to black and white
 window_size = 7;
-im = imread("day_color(small sample)/IMG_0472.jpg");
+im = imread("day_color(small sample)/DSCN0408.jpg");
 imbw = movingAverages(im, window_size);
 
 %% Get plates from image
@@ -8,12 +8,300 @@ plates = getPlates(im, imbw);
 
 %% Get digits from image
 digitsPlate = 6;
-digits = getDigits(plates, digitsPlate);
+[digits, matricula] = getDigits(plates, digitsPlate);
+printDigits(digits, matricula);
 
 %% OCR
 
+% *** KEEP COMMENTED, LONG COMPUTATIONAL TIME!! ***
+% binarizeImageDataset()
+letters_classifier = digitClassification(true);
+digits_classifier = digitClassification(false);
+save('letters_classifier.mat', 'letters_classifier');
+save('digits_classifier.mat', 'digits_classifier');
 
+% letters_classifier = load('letters_classifier.mat');
+% digits_classifier = load('digits_classifier.mat');
+
+%% Digit recognition
+prediction = recognizeDigit(matricula, digits{4}, digits_classifier)
+% test("CNN letter Dataset/7/aug24573_2.jpg")
+
+%% Point Feature matching
+
+pfm(matricula, digits{1})
 %% Functions
+
+% Point feature matching
+function pfm(matricula, bbox)
+    % Get digit to recognize and add padding
+    symbolImage = imcrop(matricula, bbox);
+    symbolImage = padarray(symbolImage, 30, 0, 'both');
+    symbolImage = padarray(symbolImage', 30, 0, 'both')';
+    targetSize = [400 NaN];
+    symbolImage = imresize(symbolImage,targetSize);
+    figure;
+    imshow(symbolImage);
+    title('Image of a Cluttered Scene');
+
+    % Get plate to compare the digit with
+    allSymbolsImage = rgb2gray(imread('plates.png'));
+    figure;
+    imshow(allSymbolsImage);
+    title('Image of a Box');
+    
+    % Detect Feature Points
+    allSymbolsPoints = detectSURFFeatures(allSymbolsImage);
+    symbolPoints = detectSURFFeatures(symbolImage);
+    
+    figure;
+    imshow(allSymbolsImage);
+    title('100 Strongest Feature Points from Box Image');
+    hold on;
+    plot(selectStrongest(allSymbolsPoints, 100));
+
+    figure;
+    imshow(symbolImage);
+    title('300 Strongest Feature Points from Symbol Image');
+    hold on;
+    plot(selectStrongest(symbolPoints, 300));
+
+
+    % Extract Feature Descriptors
+    [allSymbolsFeatures, allSymbolsPoints] = extractFeatures(allSymbolsImage, allSymbolsPoints);
+    [symbolFeatures, symbolPoints] = extractFeatures(symbolImage, symbolPoints);
+
+    % Find Putative Point Matches
+    boxPairs = matchFeatures(allSymbolsFeatures, symbolFeatures);
+
+    matchedBoxPoints = allSymbolsPoints(boxPairs(:, 1), :);
+    matchedScenePoints = symbolPoints(boxPairs(:, 2), :);
+    figure;
+    showMatchedFeatures(allSymbolsImage, symbolImage, matchedBoxPoints, ...
+        matchedScenePoints, 'montage');
+    title('Putatively Matched Points (Including Outliers)');
+
+    % Locate the Object in the Scene Using Putative Matches
+    [tform, inlierIdx] = estgeotform2d(matchedBoxPoints, matchedScenePoints, 'affine');
+    inlierBoxPoints   = matchedBoxPoints(inlierIdx, :);
+    inlierScenePoints = matchedScenePoints(inlierIdx, :);
+
+    figure;
+    showMatchedFeatures(boxImage, sceneImage, inlierBoxPoints, ...
+        inlierScenePoints, 'montage');
+    title('Matched Points (Inliers Only)');
+end
+
+% Resize digits to match trained classifier input size
+function digit = resizeDigit(img)
+    [M, N] = size(img);
+    
+    targetM = 100;
+    targetN = 75;
+    
+    % Calculate the new size for the image
+    if M > N
+        newM = targetM;
+        newN = round(N * targetM / M);
+    else
+        newM = round(M * targetN / N);
+        newN = targetN;
+    end
+    
+    img = imresize(img, [newM newN], 'Antialiasing', false, 'Method', 'nearest');
+
+    Mpad = targetM - newM;
+    Npad = targetN - newN;
+
+    % Pad the image
+    top = floor(Mpad / 2);
+    bottom = Mpad - top;
+    left = floor(Npad / 2);
+    right = Npad - left;
+    img = padarray(img, top, 0, 'pre');
+    img = padarray(img, bottom, 0, 'post');
+    img = padarray(img.', left, 0, 'pre').';
+    img = padarray(img.', right, 0, 'post').';
+
+    digit = img;
+    figure, imshow(digit);
+    size(digit)
+end
+
+function prediction = recognizeDigit(matricula, bbox, cls)
+    croppedImage = imcrop(matricula, bbox);
+
+    % Resize the image to the same size as the training images (if necessary)
+    croppedImage = resizeDigit(croppedImage);
+
+    [hog_4x4, ~] = extractHOGFeatures(croppedImage,'CellSize',[4 4]);
+    hogFeatureSize = length(hog_4x4);
+
+    cellSize = [4 4];
+    features = extractHOGFeatures(croppedImage,'CellSize',cellSize);
+    
+    prediction = predict(cls, features);
+end
+
+function test(path)
+
+    img = imread(path);
+    % img = readimage(trainingSet, 31); % choose an image from the training set to extract features from
+
+    figure, imshow(img)
+
+    window_size = 60;
+    h = ones(window_size)/window_size^2;
+    promig = imfilter(img, h, 'conv', 'replicate');
+    imbw = img > (promig - 5);
+
+    se = strel('disk',3);
+    imbw = imopen(imbw, se);
+    imbw = imclose(imbw, se);
+
+    imbw = ~bwareafilt(~imbw, 1);
+
+    figure, imshow(imbw)
+end
+
+% Load synthetic data
+% function digitClassification()
+%     % Load training and test data using |imageDatastore|.
+%     syntheticDir   = fullfile(toolboxdir('vision'),'visiondata','digits','synthetic');
+%     handwrittenDir = fullfile(toolboxdir('vision'),'visiondata','digits','handwritten');
+%     
+%     % |imageDatastore| recursively scans the directory tree containing the
+%     % images. Folder names are automatically used as labels for each image.
+%     trainingSet = imageDatastore(syntheticDir,'IncludeSubfolders',true,'LabelSource','foldernames');
+%     testSet     = imageDatastore(handwrittenDir,'IncludeSubfolders',true,'LabelSource','foldernames');
+% 
+%     img = readimage(trainingSet, 206);
+% 
+%     % Extract HOG features and HOG visualization
+%     % [hog_2x2, vis2x2] = extractHOGFeatures(img,'CellSize',[2 2]);
+%     [hog_4x4, vis4x4] = extractHOGFeatures(img,'CellSize',[4 4]);
+%     % [hog_8x8, vis8x8] = extractHOGFeatures(img,'CellSize',[8 8]);
+%     
+%     cellSize = [4 4];
+%     hogFeatureSize = length(hog_4x4);
+% 
+%     % Loop over the trainingSet and extract HOG features from each image. A
+%     % similar procedure will be used to extract features from the testSet.
+%     
+%     numImages = numel(trainingSet.Files);
+%     trainingFeatures = zeros(numImages,hogFeatureSize,'single');
+%     
+%     for i = 1:numImages
+%         img = readimage(trainingSet,i);
+%         
+%         img = im2gray(img);
+%         
+%         % Apply pre-processing steps
+%         img = imbinarize(img);
+%         
+%         trainingFeatures(i, :) = extractHOGFeatures(img,'CellSize',cellSize);  
+%     end
+%     
+%     % Get labels for each image.
+%     trainingLabels = trainingSet.Labels;
+% 
+%     % fitcecoc uses SVM learners and a 'One-vs-One' encoding scheme.
+%     classifier = fitcecoc(trainingFeatures, trainingLabels);
+% 
+%     % Extract HOG features from the test set. The procedure is similar to what
+%     % was shown earlier and is encapsulated as a helper function for brevity.
+%     [testFeatures, testLabels] = helperExtractHOGFeaturesFromImageSet(testSet, hogFeatureSize, cellSize);
+%     
+%     % Make class predictions using the test features.
+%     predictedLabels = predict(classifier, testFeatures);
+%     
+%     % Tabulate the results using a confusion matrix.
+%     confMat = confusionmat(testLabels, predictedLabels);
+%     
+%     helperDisplayConfusionMatrix(confMat)
+% end
+
+% Train a classifier for digit recognition
+function classifier = digitClassification(train_letters)
+    % Load training and test data using |imageDatastore|.
+    if train_letters
+        datasetDir = fullfile('letters_dataset');
+    else
+        datasetDir = fullfile('digits_dataset');
+    end
+
+    % |imageDatastore| recursively scans the directory tree containing the
+    % images. Folder names are automatically used as labels for each image.
+    % You can specify a percentage of the images to use as the test set using
+    % the 'SplitSize' option.
+
+    [trainingSet, testSet] = splitEachLabel(imageDatastore(datasetDir, 'IncludeSubfolders', true, 'LabelSource', 'foldernames'), 0.7);
+
+    img = readimage(trainingSet, 1); % choose an image from the training set to extract features from
+
+    % Extract HOG features and HOG visualization
+    % [hog_2x2, vis2x2] = extractHOGFeatures(img,'CellSize',[2 2]);
+    [hog_4x4, vis4x4] = extractHOGFeatures(img,'CellSize',[4 4]);
+    % [hog_8x8, vis8x8] = extractHOGFeatures(img,'CellSize',[8 8]);
+    
+    cellSize = [4 4];
+    hogFeatureSize = length(hog_4x4);
+
+    % Loop over the trainingSet and extract HOG features from each image. A
+    % similar procedure will be used to extract features from the testSet.
+    
+    tic
+    [trainingFeatures, trainingLabels] = helperExtractHOGFeaturesFromImageSet(trainingSet, hogFeatureSize, cellSize);
+    toc
+
+    tic
+    % fitcecoc uses SVM learners and a 'One-vs-One' encoding scheme.
+    classifier = fitcecoc(trainingFeatures, trainingLabels, 'Options', statset('UseParallel',true), 'Verbose', 2);
+    toc
+    
+    % Extract HOG features from the test set. The procedure is similar to what
+    % was shown earlier and is encapsulated as a helper function for brevity.
+    [testFeatures, testLabels] = helperExtractHOGFeaturesFromImageSet(testSet, hogFeatureSize, cellSize);
+    
+    % Make class predictions using the test features.
+    predictedLabels = predict(classifier, testFeatures);
+    
+    % Tabulate the results using a confusion matrix.
+    confMat = confusionmat(testLabels, predictedLabels);
+    
+    helperDisplayConfusionMatrix(confMat, train_letters)
+end
+
+
+function binarizeImageDataset()
+    % Set the path to the 'letter_dataset' folder
+    letter_dataset_path = 'letter_dataset';
+    
+    % Create an imageDatastore object for the 'letter_dataset' folder
+    imds = imageDatastore(letter_dataset_path, 'IncludeSubfolders', true, 'LabelSource', 'foldernames');
+    
+    % Loop over each image in the imageDatastore and binarize it
+    for i = 1:numel(imds.Files)
+        img = readimage(imds, i);
+
+        window_size = 60;
+        h = ones(window_size)/window_size^2;
+        promig = imfilter(img, h, 'conv', 'replicate');
+        imbw = img > (promig - 5);
+    
+        se = strel('disk',3);
+        imbw = imopen(imbw, se);
+        imbw = imclose(imbw, se);
+    
+        imbw = ~bwareafilt(~imbw, 1);
+
+
+        % Save the binarized image, overwriting the original one
+        imwrite(imbw, imds.Files{i});
+    end
+end
+
+
 % Function to binarize image 
 function imbw = movingAverages(im, window_size)
     imgray = rgb2gray(im);
@@ -55,7 +343,7 @@ function subImages = getPlates(im, imbw)
 end
 
 % Function to get digits from plates
-function real_digits = getDigits(plates, digitsPlate)
+function [real_digits, real_matricula] = getDigits(plates, digitsPlate)
     real_digits = {};
     ee = strel('line', 1, 90);
     numImages = numel(plates);
@@ -156,6 +444,7 @@ function real_digits = getDigits(plates, digitsPlate)
         % Print digits
         if numel(digits) >= 4
             printDigits(real_digits, matricula)
+            real_matricula = matricula;
         end
     end
 end
@@ -269,5 +558,45 @@ function automatedProcess()
         w = waitforbuttonpress;
         axes;    
         close all;
+    end
+end
+
+function [features, setLabels] = helperExtractHOGFeaturesFromImageSet(imds, hogFeatureSize, cellSize)
+    % Extract HOG features from an imageDatastore.
+    
+    setLabels = imds.Labels;
+    numImages = numel(imds.Files);
+    features  = zeros(numImages, hogFeatureSize, 'single');
+    
+    % Process each image and extract features
+    for j = 1:numImages
+        img = readimage(imds, j);
+        features(j, :) = extractHOGFeatures(img,'CellSize',cellSize);
+    end
+end
+
+function helperDisplayConfusionMatrix(confMat, train_letters)
+    % Display the confusion matrix in a formatted table.
+    
+    % Convert confusion matrix into percentage form
+    confMat = bsxfun(@rdivide,confMat,sum(confMat,2));
+    
+    if (train_letters)
+        digits = 'a':'z';
+        digits = setdiff(digits, 'o');
+    else
+        digits = '0':'9';
+    end
+
+    colHeadings = arrayfun(@(x)sprintf('%s',x),digits,'UniformOutput',false);
+
+    format = repmat('%-9s',1,numel(digits)+1);
+    header = sprintf(format,'class  |',colHeadings{:});
+    fprintf('\n%s\n%s\n',header,repmat('-',size(header)));
+
+    for idx = 1:numel(digits)
+        fprintf('%-9s',   [digits(idx) '      |']);
+        fprintf('%-9.2f', confMat(idx,:));
+        fprintf('\n')
     end
 end
