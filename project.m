@@ -1,6 +1,6 @@
 %% Read image and convert it to black and white
 window_size = 7;
-im = imread("day_color(small sample)/DSCN0408.jpg");
+im = imread("day_color(small sample)/IMG_0450.jpg");
 imbw = movingAverages(im, window_size);
 
 %% Get plates from image
@@ -13,131 +13,108 @@ printDigits(digits, matricula);
 
 %% OCR
 
-% *** KEEP COMMENTED, LONG COMPUTATIONAL TIME!! ***
-% binarizeImageDataset()
+% Generate dataset
+generateDataset();
+
+% Train classifiers
 letters_classifier = digitClassification(true);
 digits_classifier = digitClassification(false);
 save('letters_classifier.mat', 'letters_classifier');
 save('digits_classifier.mat', 'digits_classifier');
 
-% letters_classifier = load('letters_classifier.mat');
-% digits_classifier = load('digits_classifier.mat');
+
+%% Load classifiers if already trained
+letters_classifier = load('letters_classifier.mat');
+digits_classifier = load('digits_classifier.mat');
 
 %% Digit recognition
-prediction = recognizeDigit(matricula, digits{4}, digits_classifier)
+matricula_txt = "";
+for i = 1:numel(digits)
+    if i <= 3
+        classifier = letters_classifier;
+    else
+        classifier = digits_classifier;
+    end
+    matricula_txt = matricula_txt + char(recognizeDigit(matricula, digits{i}, classifier, i));
+end
+matricula_txt
+figure, imshow(matricula), title(matricula_txt);
 % test("CNN letter Dataset/7/aug24573_2.jpg")
 
 %% Point Feature matching
 
-pfm(matricula, digits{1})
+pointFeatureMatching(matricula, digits{3})
 %% Functions
 
-% Point feature matching
-function pfm(matricula, bbox)
-    % Get digit to recognize and add padding
-    symbolImage = imcrop(matricula, bbox);
-    symbolImage = padarray(symbolImage, 30, 0, 'both');
-    symbolImage = padarray(symbolImage', 30, 0, 'both')';
-    targetSize = [400 NaN];
-    symbolImage = imresize(symbolImage,targetSize);
-    figure;
-    imshow(symbolImage);
-    title('Image of a Cluttered Scene');
-
-    % Get plate to compare the digit with
-    allSymbolsImage = rgb2gray(imread('plates.png'));
-    figure;
-    imshow(allSymbolsImage);
-    title('Image of a Box');
-    
-    % Detect Feature Points
-    allSymbolsPoints = detectSURFFeatures(allSymbolsImage);
-    symbolPoints = detectSURFFeatures(symbolImage);
-    
-    figure;
-    imshow(allSymbolsImage);
-    title('100 Strongest Feature Points from Box Image');
-    hold on;
-    plot(selectStrongest(allSymbolsPoints, 100));
-
-    figure;
-    imshow(symbolImage);
-    title('300 Strongest Feature Points from Symbol Image');
-    hold on;
-    plot(selectStrongest(symbolPoints, 300));
-
-
-    % Extract Feature Descriptors
-    [allSymbolsFeatures, allSymbolsPoints] = extractFeatures(allSymbolsImage, allSymbolsPoints);
-    [symbolFeatures, symbolPoints] = extractFeatures(symbolImage, symbolPoints);
-
-    % Find Putative Point Matches
-    boxPairs = matchFeatures(allSymbolsFeatures, symbolFeatures);
-
-    matchedBoxPoints = allSymbolsPoints(boxPairs(:, 1), :);
-    matchedScenePoints = symbolPoints(boxPairs(:, 2), :);
-    figure;
-    showMatchedFeatures(allSymbolsImage, symbolImage, matchedBoxPoints, ...
-        matchedScenePoints, 'montage');
-    title('Putatively Matched Points (Including Outliers)');
-
-    % Locate the Object in the Scene Using Putative Matches
-    [tform, inlierIdx] = estgeotform2d(matchedBoxPoints, matchedScenePoints, 'affine');
-    inlierBoxPoints   = matchedBoxPoints(inlierIdx, :);
-    inlierScenePoints = matchedScenePoints(inlierIdx, :);
-
-    figure;
-    showMatchedFeatures(boxImage, sceneImage, inlierBoxPoints, ...
-        inlierScenePoints, 'montage');
-    title('Matched Points (Inliers Only)');
-end
-
 % Resize digits to match trained classifier input size
-function digit = resizeDigit(img)
-    [M, N] = size(img);
+% function digit = resizeDigit(img)
+%     [M, N] = size(img);
+%     
+%     targetM = 30;
+%     targetN = 25;
+%     
+%     % Calculate the new size for the image
+%     if M > N
+%         newM = targetM;
+%         newN = round(N * targetM / M);
+%     else
+%         newM = round(M * targetN / N);
+%         newN = targetN;
+%     end
+%     
+%     img = imresize(img, [newM newN], 'Antialiasing', false, 'Method', 'nearest');
+% 
+%     Mpad = targetM - newM;
+%     Npad = targetN - newN;
+% 
+%     % Pad the image
+%     top = floor(Mpad / 2);
+%     bottom = Mpad - top;
+%     left = floor(Npad / 2);
+%     right = Npad - left;
+%     img = padarray(img, top, 0, 'pre');
+%     img = padarray(img, bottom, 0, 'post');
+%     img = padarray(img.', left, 0, 'pre').';
+%     img = padarray(img.', right, 0, 'post').';
+% 
+%     digit = img;
+%     size(digit)
+% end
+function resizedImage = resizeDigit(image)
+    targetWidth = 25;
+    targetHeight = 30;
+    % Resize the image
+    resizedImage = imresize(image, [targetHeight NaN], 'nearest');
     
-    targetM = 100;
-    targetN = 75;
-    
-    % Calculate the new size for the image
-    if M > N
-        newM = targetM;
-        newN = round(N * targetM / M);
+    % Get the size of the resized image
+    [height, width] = size(resizedImage);
+
+    if width > targetWidth
+        resizedImage = imresize(image, [NaN targetWidth], 'nearest');
+        [height, width] = size(resizedImage);
+        pad = targetHeight - height;
+        resizedImage = padarray(resizedImage, [floor(pad/2) 0], 0, 'pre');
+        resizedImage = padarray(resizedImage, [pad - floor(pad/2) 0], 0, 'post');
+        figure, imshow(resizedImage)
     else
-        newM = round(M * targetN / N);
-        newN = targetN;
+        pad = targetWidth - width;
+        resizedImage = padarray(resizedImage, [0 floor(pad/2)], 0, 'pre');
+        resizedImage = padarray(resizedImage, [0 pad - floor(pad/2)], 0, 'post');
     end
-    
-    img = imresize(img, [newM newN], 'Antialiasing', false, 'Method', 'nearest');
-
-    Mpad = targetM - newM;
-    Npad = targetN - newN;
-
-    % Pad the image
-    top = floor(Mpad / 2);
-    bottom = Mpad - top;
-    left = floor(Npad / 2);
-    right = Npad - left;
-    img = padarray(img, top, 0, 'pre');
-    img = padarray(img, bottom, 0, 'post');
-    img = padarray(img.', left, 0, 'pre').';
-    img = padarray(img.', right, 0, 'post').';
-
-    digit = img;
-    figure, imshow(digit);
-    size(digit)
 end
 
-function prediction = recognizeDigit(matricula, bbox, cls)
+function prediction = recognizeDigit(matricula, bbox, cls, i)
     croppedImage = imcrop(matricula, bbox);
 
     % Resize the image to the same size as the training images (if necessary)
     croppedImage = resizeDigit(croppedImage);
 
-    [hog_4x4, ~] = extractHOGFeatures(croppedImage,'CellSize',[4 4]);
-    hogFeatureSize = length(hog_4x4);
+    if i > 3
+        cellSize = [2 2];
+    else
+        cellSize = [4 4];
+    end
 
-    cellSize = [4 4];
     features = extractHOGFeatures(croppedImage,'CellSize',cellSize);
     
     prediction = predict(cls, features);
@@ -223,29 +200,29 @@ end
 
 % Train a classifier for digit recognition
 function classifier = digitClassification(train_letters)
-    % Load training and test data using |imageDatastore|.
     if train_letters
         datasetDir = fullfile('letters_dataset');
     else
         datasetDir = fullfile('digits_dataset');
     end
 
-    % |imageDatastore| recursively scans the directory tree containing the
+    % imageDatastore recursively scans the directory tree containing the
     % images. Folder names are automatically used as labels for each image.
-    % You can specify a percentage of the images to use as the test set using
-    % the 'SplitSize' option.
-
     [trainingSet, testSet] = splitEachLabel(imageDatastore(datasetDir, 'IncludeSubfolders', true, 'LabelSource', 'foldernames'), 0.7);
 
-    img = readimage(trainingSet, 1); % choose an image from the training set to extract features from
+    img = readimage(trainingSet, 1);
 
     % Extract HOG features and HOG visualization
-    % [hog_2x2, vis2x2] = extractHOGFeatures(img,'CellSize',[2 2]);
-    [hog_4x4, vis4x4] = extractHOGFeatures(img,'CellSize',[4 4]);
+    if ~train_letters
+        [hog, vis2x2] = extractHOGFeatures(img,'CellSize',[2 2]);
+        cellSize = [2 2];
+    else 
+        [hog, vis4x4] = extractHOGFeatures(img,'CellSize',[4 4]);
+        cellSize = [4 4];
+    end
     % [hog_8x8, vis8x8] = extractHOGFeatures(img,'CellSize',[8 8]);
     
-    cellSize = [4 4];
-    hogFeatureSize = length(hog_4x4);
+    hogFeatureSize = length(hog);
 
     % Loop over the trainingSet and extract HOG features from each image. A
     % similar procedure will be used to extract features from the testSet.
@@ -357,7 +334,7 @@ function [real_digits, real_matricula] = getDigits(plates, digitsPlate)
             
             Iprops = regionprops(matricula, 'BoundingBox','Area', 'Image');
             numElems = numel(Iprops);
-            if numElems < digitsPlate 
+            if numElems < digitsPlate
                 continue
             end
     
@@ -582,8 +559,7 @@ function helperDisplayConfusionMatrix(confMat, train_letters)
     confMat = bsxfun(@rdivide,confMat,sum(confMat,2));
     
     if (train_letters)
-        digits = 'a':'z';
-        digits = setdiff(digits, 'o');
+        digits = ['A','B','E','H','I','K','M','N','O','P','T','X','Y','Z'];
     else
         digits = '0':'9';
     end
